@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "pygreeks"
+version = "1.0.0"
+description = "Calculate accurate greeks with torch autograd"
+authors = ["Matt Stancliff <matt@genges.com>"]
+license = "Apache-2.0"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+torch = "^1.7.1"
+py_vollib = "^1.0.1"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
