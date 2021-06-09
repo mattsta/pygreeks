@@ -4,6 +4,12 @@ from dataclasses import dataclass
 # for IV calculation via root finding/gradient methods
 from scipy import optimize
 
+# these two imports are only to fix errors with py_vollib warning and
+# too verbose garbage debug printing hard coded into the library
+# TODO: fork py_vollib and fix everything to act nicer.
+import numpy as np
+import sys
+
 # From https://github.com/vollib/py_vollib
 # Uses numerical approximations to evalute the derivatives
 # in basically two time steps.
@@ -29,6 +35,9 @@ import py_vollib.black_scholes.implied_volatility as bs_iv
 # https://www.newyorkfed.org/markets/reference-rates/effr
 # Currently: target rate between 0.06% and 0.07%, so 0.0006 to 0.0007
 BASE_RATE = 0.0007
+
+# Tell numpy to be quiet when py_vollib does bad math
+np.seterr(all="ignore")
 
 
 def unwrap(t):
@@ -348,6 +357,11 @@ def optionGreeksFast(option):
 
     # Greeks are calculated using numerical trickery
     # without actually evaluating derivatives.
+
+    # ugh, this is annoying but there's a debug print in the pyvol upstream, so we
+    # disable stdout for these so they don't print ugly things.
+    origout = sys.stdout
+    sys.stdout = None
     theta = bs_ga.theta(
         flag,
         option.underlying,
@@ -380,6 +394,8 @@ def optionGreeksFast(option):
         BASE_RATE,
         option.iv,
     )
+
+    sys.stdout = origout
 
     greeks = Greeks(theta, delta, gamma, vega)
     option.greeks = greeks
