@@ -248,9 +248,13 @@ def deriveGreeks2(kind, s0, k, t, sigma, r=BASE_RATE, which=[0]):
 def ivFromOptionAuto(option, guess: float = 0):
     def findIV(iv):
         """ Function to find a zero root for (parameterized by 'iv')"""
-        npv, *rest = deriveGreeks1(
-            option.kind, option.underlying, option.strike, option.expiry, iv
-        )
+        npv = optionNPV(
+            option.kind,
+            option.underlying,
+            option.strike,
+            option.expiry,
+            iv,
+        ).item()
 
         return npv - option.npv
 
@@ -265,15 +269,25 @@ def ivFromOptionAuto(option, guess: float = 0):
     else:
         # else, use a wide search
         # ~10 ms, but doesn't need an input estimate.
-        option.iv = optimize.brentq(findIV, 0.00001, 100)
+        # yeah, this looks weird having a negative bracket,
+        # but for deep ITM options, it needs the wider search
+        # space for the excessive IV calculations.
+        # Note: the 'width' of the ± range doesn't matter very
+        #       much since it's a quick binary search down to
+        #       the best zero-point anyway.
+        try:
+            option.iv = optimize.brentq(findIV, 0, 5000)
+        except:
+            # Sorry, couldn't figure it out, but we don't
+            # want to throw an exception.
+            option.iv = 0
 
     return option.iv
 
 
 def ivFromOptionFast(option):
-    # ~90 us (11x faster than ivFromOptionAuto doh!)
-
     try:
+        # ~90 us (11x faster than ivFromOptionAuto doh!)
         option.iv = bs_iv.implied_volatility(
             option.npv,
             option.underlying,
@@ -287,12 +301,21 @@ def ivFromOptionFast(option):
         # "BelowIntrinsicException:
         #  ('The volatility is below the intrinsic value.',)"
         # but do we care? We'll just give it an error value.
-        option.iv = None
+
+        # The bs_iv library is very sensitive to edge conditions
+        # and it doesn't seem to like deep ITM options, so we
+        # just give them all default values here. It's not accurate,
+        # but good enough.
+        # It is still reasonably accurate for near-ITM options.
+        # option.iv = 0.10
+
+        # Actually, if the quick method fails, fall back to the Auto method!
+        option.iv = ivFromOptionAuto(option)
 
     return option.iv
 
 
-def optionGreeksAuto(option):
+def optionGreeksAuto(option, calculateNPV=True):
     """Calculate exact greeks using derivatives.
 
     Populates 'option' with greeks and npv of option"""
@@ -301,6 +324,7 @@ def optionGreeksAuto(option):
         assert (
             option.npv
         ), "If you don't provide 'iv' you need to provide current 'npv' to calculate 'iv'"
+
         ivFromOptionAuto(option)
 
     npv, theta, delta, vega = deriveGreeks1(
@@ -321,13 +345,17 @@ def optionGreeksAuto(option):
 
     greeks = Greeks(theta, delta, gamma, vega)
 
-    option.npv = npv.item()
+    if calculateNPV:
+        # due to the pytorch usage we always calculate it anyway,
+        # but we don't set it unless requested.
+        option.npv = npv.item()
+
     option.greeks = greeks
 
     return option
 
 
-def optionGreeksFast(option):
+def optionGreeksFast(option, calculateNPV=True):
     """Calculate approximate (but accurate) greeks using trickery.
 
     Note: other than 'npv' calculation, this uses py_vollib to caluclate
@@ -338,16 +366,24 @@ def optionGreeksFast(option):
         assert (
             option.npv
         ), "If you don't provide 'iv' you need to provide current 'npv' to calculate 'iv'"
+
         ivFromOptionFast(option)
 
     # We still calculate the NPV using pytorch
-    npv = optionNPV(
-        option.kind,
-        option.underlying,
-        option.strike,
-        option.expiry,
-        option.iv,
-    )
+    if calculateNPV:
+        try:
+            npv = optionNPV(
+                option.kind,
+                option.underlying,
+                option.strike,
+                option.expiry,
+                option.iv,
+            )
+            option.npv = npv.item()
+        except:
+            # Probably the torch error "ValueError: The value argument must be within the support"
+            # because ???
+            npv = None
 
     flag = option.kind[0].lower()
 
@@ -399,17 +435,5 @@ def optionGreeksFast(option):
 
     greeks = Greeks(theta, delta, gamma, vega)
     option.greeks = greeks
-
-    option.npv = npv.item()
-    try:
-        option.iv = bs_iv.implied_volatility(
-            option.npv, option.underlying, option.strike, option.expiry, BASE_RATE, flag
-        )
-    except:
-        # this can throw
-        # "BelowIntrinsicException:
-        #  ('The volatility is below the intrinsic value.',)"
-        # but do we care? We'll just give it an error value.
-        option.iv = None
 
     return option
