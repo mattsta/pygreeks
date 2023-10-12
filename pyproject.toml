@@ -1,18 +1,15 @@
 [tool.poetry]
 name = "pygreeks"
-version = "3.0.1"
+version = "3.0.6"
 description = "Calculate accurate greeks and IV with torch autograd or fast numeric approximation"
 authors = ["Matt Stancliff <matt@genges.com>"]
 license = "Apache-2.0"
 
 [tool.poetry.dependencies]
-# Note: the python <3.10 version requirement is only because scipy requires
-#       such specific version limits currently.
-python = ">=3.8,<3.10"
-torch = "^1.11.0"
+python = ">=3.9"
+torch = "^2.0"
 py_vollib = "^1.0.1"
 scipy = "^1.8.0"
-pandas = "^1.4.2"
 
 [tool.poetry.dev-dependencies]
 
